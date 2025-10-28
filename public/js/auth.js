@@ -1,20 +1,29 @@
-//обработка 401 для fetch
-async function authFetch(url, options = {}) {
-  const res = await fetch(url, {
-    ...options,
-    credentials: 'include'
+// Универсальный запрос с авторизацией (GraphQL)
+async function authFetchGraphQL(query, variables = {}) {
+  const res = await fetch('/graphql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ query, variables })
   });
-  
-  if (res.status === 401) {
+
+  const json = await res.json();
+
+  // обработка неавторизованных запросов
+  if (json.errors && json.errors[0]?.message === 'UNAUTHENTICATED') {
     AuthManager.setCurrentUser(null);
     AuthManager.showAuth();
     throw new Error('Authentication required');
   }
-  
-  return res;
+
+  if (json.errors) {
+    throw new Error(json.errors[0].message || 'GraphQL error');
+  }
+
+  return json.data;
 }
 
-//менеджер аутентификации
+// менеджер аутентификации
 const AuthManager = {
   currentUser: null,
 
@@ -31,18 +40,23 @@ const AuthManager = {
     document.getElementById('showLoginLink').addEventListener('click', this.showLogin.bind(this));
   },
 
-  async checkAuth() {  //проверяем состояние аутентификации
+  async checkAuth() {
     try {
-      const res = await fetch('/auth/me');
-      if (res.ok) {
-        const data = await res.json();
-        this.setCurrentUser(data.user);
+      const data = await authFetchGraphQL(`
+        query {
+          me {
+            id
+            username
+          }
+        }
+      `);
+      if (data.me) {
+        this.setCurrentUser(data.me);
         this.showApp();
       } else {
         this.showAuth();
       }
-    } catch (err) {
-      console.error('Auth check failed:', err);
+    } catch {
       this.showAuth();
     }
   },
@@ -56,8 +70,6 @@ const AuthManager = {
     document.getElementById('authSection').classList.add('hidden');
     document.getElementById('appSection').classList.remove('hidden');
     document.getElementById('username').textContent = this.currentUser.username;
-    
-    // инициализируем менеджер задач после успешной аутентификации
     if (typeof TaskManager !== 'undefined') {
       TaskManager.init();
     }
@@ -76,63 +88,60 @@ const AuthManager = {
   async handleLogin(ev) {
     ev.preventDefault();
     const formData = new FormData(ev.target);
-    const data = {
+    const vars = {
       username: formData.get('username'),
       password: formData.get('password')
     };
 
     try {
-      const res = await fetch('/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
+      const data = await authFetchGraphQL(`
+        mutation($username: String!, $password: String!) {
+          login(username: $username, password: $password) {
+            id
+            username
+          }
+        }
+      `, vars);
 
-      if (res.ok) {
-        const result = await res.json();
-        this.setCurrentUser(result.user);
-        this.showApp();
-      } else {
-        const error = await res.json();
-        this.showError('Ошибка входа: ' + (error.message || 'Неверные данные'));
-      }
+      this.setCurrentUser(data.login);
+      this.showApp();
     } catch (err) {
-      this.showError('Ошибка сети');
+      this.showError('Ошибка входа: ' + err.message);
     }
   },
 
-    async handleRegister(ev) {
+  async handleRegister(ev) {
     ev.preventDefault();
     const formData = new FormData(ev.target);
-    const data = {
-        username: formData.get('username'),
-        password: formData.get('password')
+    const vars = {
+      username: formData.get('username'),
+      password: formData.get('password')
     };
 
     try {
-        const res = await fetch('/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-        });
-
-        const result = await res.json();
-        
-        if (res.ok) {
-        this.setCurrentUser(result.user);
-        this.showApp();
-        } else {
-        this.showError(result.message || result.error || 'Неизвестная ошибка');
+      const data = await authFetchGraphQL(`
+        mutation($username: String!, $password: String!) {
+          register(username: $username, password: $password) {
+            id
+            username
+          }
         }
+      `, vars);
+
+      this.setCurrentUser(data.register);
+      this.showApp();
     } catch (err) {
-        console.error('Registration error:', err);
-        this.showError('Ошибка сети при регистрации');
+      this.showError('Ошибка регистрации: ' + err.message);
     }
   },
 
   async handleLogout() {
     try {
-      await fetch('/auth/logout', { method: 'POST' });
+      await authFetchGraphQL(`
+        mutation {
+          logout
+        }
+      `);
       this.setCurrentUser(null);
       this.showAuth();
     } catch (err) {

@@ -1,6 +1,3 @@
-document.addEventListener('DOMContentLoaded', function() {
-  
-    // инициализируем менеджер аутентификации
+document.addEventListener('DOMContentLoaded', () => {
   AuthManager.init();
-  
 });
