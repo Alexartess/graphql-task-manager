@@ -39,7 +39,7 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 const DB_PATH = path.join(__dirname, 'db.sqlite');
 const db = new sqlite3.Database(DB_PATH);
 
-// ====== DB HELPERS ======
+//инициализация базы данных
 function runAsync(sql, params=[]) {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function(err) {
@@ -65,7 +65,6 @@ function getAsync(sql, params=[]) {
   });
 }
 
-// ====== INIT TABLES ======
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,7 +91,7 @@ db.serialize(() => {
   )`);
 });
 
-// ====== AUTH ======
+// Middleware аутентификации
 const getUserFromToken = (req) => {
   const token = req.cookies?.token;
   if (!token) return null;
@@ -103,7 +102,7 @@ const getUserFromToken = (req) => {
   }
 };
 
-// ====== GRAPHQL SCHEMA ======
+//graphQL schema
 const typeDefs = gql`
   type User {
     id: ID!
@@ -145,7 +144,7 @@ const typeDefs = gql`
   }
 `;
 
-// ====== GRAPHQL RESOLVERS ======
+// resolvers
 const resolvers = {
   Query: {
     me: async (_, __, { user }) => user || null,
@@ -290,7 +289,8 @@ const resolvers = {
   }
 };
 
-// ====== SERVER START ======
+
+//запускаем graphql сервер
 (async () => {
   const server = new ApolloServer({
     typeDefs,

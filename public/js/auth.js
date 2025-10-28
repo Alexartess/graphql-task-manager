@@ -1,4 +1,3 @@
-// Универсальный запрос с авторизацией (GraphQL)
 async function authFetchGraphQL(query, variables = {}) {
   const res = await fetch('/graphql', {
     method: 'POST',
@@ -22,6 +21,23 @@ async function authFetchGraphQL(query, variables = {}) {
 
   return json.data;
 }
+
+
+async function authFetchRest(url, options = {}) {
+  const res = await fetch(url, {
+    ...options,
+    credentials: 'include'
+  });
+  
+  if (res.status === 401) {
+    AuthManager.setCurrentUser(null);
+    AuthManager.showAuth();
+    throw new Error('Authentication required');
+  }
+  
+  return res;
+}
+
 
 // менеджер аутентификации
 const AuthManager = {
